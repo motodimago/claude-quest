@@ -5,6 +5,7 @@ import type { CaseQuestion } from '../types';
 import { Content } from '../lib/content';
 import { CONFIG } from '../data/config';
 import { isBossUnlocked } from '../lib/progress';
+import { shuffled } from '../lib/shuffle';
 import { sfx } from '../lib/sfx';
 import { useGameStore } from '../store/useGameStore';
 import { OptionButton, Pill, useScrollAnchor } from '../components/common';
@@ -19,14 +20,15 @@ export function BossScreen() {
   const tier = Content.getTier(tierId);
   const unlocked = isBossUnlocked(tierId, records);
 
-  const cases = useMemo<CaseQuestion[]>(() => {
-    const cs = [...Content.tierCases(tierId)];
-    for (let i = cs.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [cs[i], cs[j]] = [cs[j], cs[i]];
-    }
-    return cs;
-  }, [tierId]);
+  // 出題順と、各問の選択肢の並びをどちらもシャッフルする（正解はデータ上は先頭固定のため）。
+  const cases = useMemo<CaseQuestion[]>(
+    () =>
+      shuffled(Content.tierCases(tierId)).map((c) => ({
+        ...c,
+        feature: { ...c.feature, options: shuffled(c.feature.options) },
+      })),
+    [tierId],
+  );
 
   const [idx, setIdx] = useState(0);
   const [chosen, setChosen] = useState<string | null>(null);

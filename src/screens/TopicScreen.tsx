@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import type { CaseQuestion, StudyBlock, Topic } from '../types';
 import { Content } from '../lib/content';
 import { CONFIG } from '../data/config';
 import { isMastered } from '../lib/progress';
+import { shuffled } from '../lib/shuffle';
 import { sfx } from '../lib/sfx';
 import { CONFETTI_COLORS, fireworks } from '../lib/celebrate';
 import { useGameStore } from '../store/useGameStore';
@@ -123,12 +124,17 @@ function QuizView({ topic, onDone }: { topic: Topic; onDone: () => void }) {
   }
 
   const q = topic.quiz[qi];
+  // 表示用に選択肢をシャッフル（正解はデータ上は常に先頭のため）。問題ごとに固定。
+  const options = useMemo(
+    () => shuffled(q.options.map((o, i) => ({ ...o, isCorrect: i === q.correct }))),
+    [q],
+  );
   const answered = chosen !== null;
 
   function choose(i: number) {
     if (answered) return;
     setChosen(i);
-    const ok = i === q.correct;
+    const ok = options[i].isCorrect;
     recordQuiz(topic.id, ok);
     if (ok) sfx.correct();
     else sfx.wrong();
@@ -154,10 +160,10 @@ function QuizView({ topic, onDone }: { topic: Topic; onDone: () => void }) {
       </div>
       <p className="text-lg font-semibold text-parchment">{q.promptJa}</p>
       <div className="space-y-2">
-        {q.options.map((o, i) => {
+        {options.map((o, i) => {
           let status: OptionStatus = 'idle';
           if (answered) {
-            if (i === q.correct) status = 'correct';
+            if (o.isCorrect) status = 'correct';
             else if (i === chosen) status = 'wrong';
           }
           return (
@@ -199,6 +205,10 @@ function CasePlayer({
   const [bWrong, setBWrong] = useState(false);
   const [solved, setSolved] = useState(false);
 
+  // 表示用に各ステップの選択肢をシャッフル（正解はデータ上は常に先頭のため）。
+  const aOptions = useMemo(() => shuffled(caseQ.feature.options), [caseQ]);
+  const bOptions = useMemo(() => shuffled(caseQ.invoke.options), [caseQ]);
+
   const aCorrectChosen = caseQ.feature.options.some((o) => o.correct && aReveal[o.id]);
 
   function chooseA(id: string, correct: boolean) {
@@ -234,7 +244,7 @@ function CasePlayer({
       <div>
         <p className="mb-2 font-bold text-arcane-400">① {caseQ.feature.promptJa}</p>
         <div className="space-y-2">
-          {caseQ.feature.options.map((o) => {
+          {aOptions.map((o) => {
             const revealed = !!aReveal[o.id];
             const status: OptionStatus = !revealed ? 'idle' : o.correct ? 'correct' : 'wrong';
             return (
@@ -267,7 +277,7 @@ function CasePlayer({
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <p className="mb-2 font-bold text-arcane-400">② {caseQ.invoke.promptJa}</p>
           <div className="space-y-2">
-            {caseQ.invoke.options.map((o, i) => {
+            {bOptions.map((o, i) => {
               const revealed = !!bReveal[i];
               const status: OptionStatus = !revealed ? 'idle' : o.correct ? 'correct' : 'wrong';
               return (

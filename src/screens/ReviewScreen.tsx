@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Topic } from '../types';
 import { Content } from '../lib/content';
+import { shuffled } from '../lib/shuffle';
 import { SRS } from '../lib/srs';
 import { useGameStore } from '../store/useGameStore';
 import { OptionButton, Pill, SectionTitle } from '../components/common';
@@ -10,12 +11,19 @@ import type { OptionStatus } from '../components/common';
 export function ReviewScreen() {
   const reviewAnswer = useGameStore((s) => s.reviewAnswer);
 
-  // マウント時に期限到来トピックをスナップショット（クイズを持つもの）
-  const queue = useMemo<Topic[]>(() => {
+  // マウント時に期限到来トピックをスナップショット（クイズを持つもの）。
+  // 選択肢は表示用にシャッフルして保持する（正解はデータ上は先頭固定のため）。
+  const queue = useMemo(() => {
     const records = useGameStore.getState().topics;
-    return Content.allTopics.filter(
-      (t) => SRS.isDue(records[t.id]?.srs) && t.quiz.length > 0,
-    );
+    return Content.allTopics
+      .filter((t) => SRS.isDue(records[t.id]?.srs) && t.quiz.length > 0)
+      .map((t: Topic) => {
+        const q = t.quiz[0];
+        return {
+          topic: t,
+          options: shuffled(q.options.map((o, i) => ({ ...o, isCorrect: i === q.correct }))),
+        };
+      });
   }, []);
 
   const [idx, setIdx] = useState(0);
@@ -54,14 +62,14 @@ export function ReviewScreen() {
     );
   }
 
-  const topic = queue[idx];
+  const { topic, options } = queue[idx];
   const q = topic.quiz[0];
   const answered = chosen !== null;
 
   function choose(i: number) {
     if (answered) return;
     setChosen(i);
-    reviewAnswer(topic.id, i === q.correct);
+    reviewAnswer(topic.id, options[i].isCorrect);
   }
   function next() {
     setDoneCount((c) => c + 1);
@@ -81,10 +89,10 @@ export function ReviewScreen() {
         <p className="mb-1 text-xs text-night-100/50">{topic.titleJa}</p>
         <p className="mb-4 text-lg font-semibold text-parchment">{q.promptJa}</p>
         <div className="space-y-2">
-          {q.options.map((o, i) => {
+          {options.map((o, i) => {
             let status: OptionStatus = 'idle';
             if (answered) {
-              if (i === q.correct) status = 'correct';
+              if (o.isCorrect) status = 'correct';
               else if (i === chosen) status = 'wrong';
             }
             return (
