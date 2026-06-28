@@ -1,3 +1,4 @@
+import { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import type { Tier, Topic, TopicState } from '../types';
@@ -66,7 +67,7 @@ function TopicNode({ topic, state }: { topic: Topic; state: TopicState }) {
   );
 }
 
-function TierRegion({ tier }: { tier: Tier }) {
+function TierRegion({ tier, id }: { tier: Tier; id?: string }) {
   const records = useGameStore((s) => s.topics);
   const bossClearedMap = useGameStore((s) => s.counters.bossCleared);
 
@@ -86,7 +87,7 @@ function TierRegion({ tier }: { tier: Tier }) {
   const bossCenter = center(bossPos);
 
   return (
-    <section className={`panel overflow-hidden p-4 ${unlocked ? '' : 'opacity-70'}`}>
+    <section id={id} className={`panel scroll-mt-24 overflow-hidden p-4 ${unlocked ? '' : 'opacity-70'}`}>
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="text-2xl">{tier.icon}</span>
@@ -194,6 +195,34 @@ function StubTier({ tier }: { tier: Tier }) {
 }
 
 export function MapScreen() {
+  const records = useGameStore((s) => s.topics);
+
+  // いま一番進んでいる（最前線の）ティアを求める：解放済みアクティブティアのうち、
+  // まだ習得しきっていない最も奥のもの。先頭ティアが最前線のとき（＝序盤）は
+  // イントロを隠さないようにスクロールしない。
+  const frontierId = useMemo(() => {
+    const active = Content.tiers.filter((t) => t.status === 'active');
+    const unlocked = active.filter((t) => isTierUnlocked(t.id, records));
+    const frontier =
+      [...unlocked].reverse().find((t) => tierMasteryPct(t.id, records) < 1) ??
+      unlocked[unlocked.length - 1] ??
+      active[0];
+    return frontier && frontier.id !== active[0]?.id ? frontier.id : undefined;
+  }, [records]);
+
+  // 戻ってきたら最前線のティアまで自動スクロール（マウント時に一度だけ）。
+  useEffect(() => {
+    if (!frontierId) return;
+    const raf = requestAnimationFrame(() => {
+      document
+        .getElementById(`tier-${frontierId}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return () => cancelAnimationFrame(raf);
+    // frontierId はマウント時点の値で十分（戻るたびに一度だけ実行）。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="space-y-4">
       <div className="panel p-4">
@@ -208,7 +237,7 @@ export function MapScreen() {
       </div>
       {Content.tiers.map((tier) =>
         tier.status === 'active' ? (
-          <TierRegion key={tier.id} tier={tier} />
+          <TierRegion key={tier.id} tier={tier} id={`tier-${tier.id}`} />
         ) : (
           <StubTier key={tier.id} tier={tier} />
         ),
